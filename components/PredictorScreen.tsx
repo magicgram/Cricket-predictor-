@@ -116,7 +116,7 @@ const LimitReachedView = React.memo(({ handleDepositRedirect }: { handleDepositR
 const CricketView = React.memo((props: {
     onOpenSidebar: () => void;
     isPredicting: boolean;
-    onGetSignal: (resetOnly?: boolean) => void;
+    onGetSignal: (resetOnly?: boolean, teamShort?: string) => void;
     predictionResult: any | null;
     predictionsLeft: number;
     user: User;
@@ -204,7 +204,6 @@ const CricketView = React.memo((props: {
                     if (response.ok) {
                         const json = await response.json();
                         if (json && json.data && json.data.length > 0) {
-                            // Basic mapping to ensure we use real data if available
                             const match = json.data[Math.floor(Math.random() * json.data.length)];
                             fetchedData = {
                                 ...generateMockMatch(),
@@ -261,7 +260,12 @@ const CricketView = React.memo((props: {
     }, [matchData]);
 
     const handleGenerateNew = () => {
-        props.onGetSignal();
+        if (matchData) {
+            // Pass the primary team for this match to history
+            props.onGetSignal(false, matchData.teamA.short);
+        } else {
+            props.onGetSignal();
+        }
     };
     
     const handleNextMatch = () => {
@@ -595,7 +599,6 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
   const [history, setHistory] = useState<any[]>([]); // To store last 3 predictions
   const { t } = useLanguage();
 
-  // Logic to clear history items older than 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
@@ -613,7 +616,7 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
     setProfilePic(newPicUrl);
   }, []);
 
-  const handleGetSignal = useCallback(async (resetOnly = false) => {
+  const handleGetSignal = useCallback(async (resetOnly = false, teamShort?: string) => {
     if (resetOnly) {
         setPredictionResult(null);
         return;
@@ -651,12 +654,11 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
             odds: randomOutcome.odds,
             confidence: confidence,
             timestamp: Date.now(),
-            teamShort: Math.random() > 0.5 ? "IND" : "AUS" // Mocking team display for history
+            teamShort: teamShort || (Math.random() > 0.5 ? "IND" : "AUS")
         };
 
         setPredictionResult(newPrediction);
         
-        // Update History: Add new, limit to 3
         setHistory(prev => {
             const updated = [newPrediction, ...prev];
             return updated.slice(0, 3);
@@ -729,6 +731,7 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
       )}
       
       {currentView === 'testPostback' && 
+        /* Fix: Removed reference to undefined 'handleBackToLogin' which was causing a reference error on line 734 */
         <TestPostbackScreen onBack={handleBackToPredictor} />
       }
     </div>
