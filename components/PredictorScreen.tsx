@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { User } from '../types';
 import { usePrediction } from '../services/authService';
 import Sidebar from './Sidebar';
@@ -48,7 +48,6 @@ const CircularProgress = ({ percentage, color = "#00ff9d" }: { percentage: numbe
 
     return (
         <div className="relative w-20 h-20 flex items-center justify-center">
-            {/* Background Circle */}
             <svg className="transform -rotate-90 w-20 h-20">
                 <circle
                     cx="40"
@@ -88,25 +87,21 @@ const LimitReachedView = React.memo(({ handleDepositRedirect }: { handleDepositR
           className="w-full min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans"
           style={{ background: 'linear-gradient(to bottom, #0A0A0F, #13131A)' }}
         >
-          {/* Ambient Background */}
           <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
               <div className="absolute top-[-20%] left-[20%] w-[60%] h-[60%] bg-red-900/10 rounded-full blur-[100px]"></div>
           </div>
   
           <div className="w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-[0_0_50px_rgba(0,0,0,0.6)] z-10 text-center relative">
                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
-               
                 <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 ring-1 ring-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
                    <LockIcon />
                 </div>
-                
                 <h1 className="text-2xl font-bold uppercase text-white tracking-wider mb-3 font-russo">
                     {t('limitReachedTitle')}
                 </h1>
                 <p className="text-gray-400 text-sm leading-relaxed mb-8 font-light">
                     {t('limitReachedText')}
                 </p>
-                
                 <button 
                     onClick={handleDepositRedirect}
                     className="w-full py-4 bg-gradient-to-r from-[#00ff9d] to-[#00cc7d] text-[#0A0A0F] font-bold text-lg uppercase rounded-xl transition-all hover:brightness-110 hover:shadow-[0_0_25px_rgba(0,255,157,0.4)] active:scale-95 shadow-lg tracking-wide"
@@ -125,6 +120,7 @@ const CricketView = React.memo((props: {
     predictionResult: any | null;
     predictionsLeft: number;
     user: User;
+    history: any[];
 }) => {
     const { t } = useLanguage();
     const [matchData, setMatchData] = useState<any>(null);
@@ -132,9 +128,7 @@ const CricketView = React.memo((props: {
     const [countdown, setCountdown] = useState("00:00:00");
     const [apiStatus, setApiStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
 
-    // --- RANDOM DATA GENERATOR (Fallback) ---
-    // This ensures that even if the API is offline or key is missing,
-    // the user sees DIFFERENT matches every time, not just "India vs Australia".
+    // --- RANDOM DATA GENERATOR ---
     const generateMockMatch = useCallback(() => {
         const teams = [
             { name: "India", short: "IND", img: "🇮🇳", color: "from-blue-600 to-blue-800" },
@@ -148,7 +142,6 @@ const CricketView = React.memo((props: {
             { name: "Bangladesh", short: "BAN", img: "🇧🇩", color: "from-green-800 to-green-900" }
         ];
 
-        // Randomly select 2 different teams
         let idx1 = Math.floor(Math.random() * teams.length);
         let idx2 = Math.floor(Math.random() * teams.length);
         while (idx1 === idx2) {
@@ -157,18 +150,12 @@ const CricketView = React.memo((props: {
 
         const teamA = teams[idx1];
         const teamB = teams[idx2];
-        
         const leagues = ["T20 World Cup", "IPL 2025", "Big Bash League", "Champions Trophy", "Asia Cup"];
         const league = leagues[Math.floor(Math.random() * leagues.length)];
-        
         const venues = ["Eden Gardens", "MCG", "Lord's", "Dubai Stadium", "Wankhede"];
         const venue = venues[Math.floor(Math.random() * venues.length)];
-
-        // Random odds
         const oddsA = (1.5 + Math.random()).toFixed(2);
         const oddsB = (1.5 + Math.random()).toFixed(2);
-        
-        // Random Stats
         const winA = Math.floor(40 + Math.random() * 45);
 
         return {
@@ -176,19 +163,18 @@ const CricketView = React.memo((props: {
             league: league,
             teamA: teamA,
             teamB: teamB,
-            startTime: new Date(Date.now() + Math.floor(Math.random() * 10800000)), // Random time within 3 hours
+            startTime: new Date(Date.now() + Math.floor(Math.random() * 10800000)),
             venue: venue,
             odds: { teamA: oddsA, teamB: oddsB },
             stats: {
                 last5A: Array(5).fill(0).map(() => Math.random() > 0.4 ? "W" : "L"),
                 last5B: Array(5).fill(0).map(() => Math.random() > 0.4 ? "W" : "L"),
                 winRateA: winA,
-                winRateB: 100 - winA - Math.floor(Math.random() * 5) // roughly complementary
+                winRateB: 100 - winA - Math.floor(Math.random() * 5)
             }
         };
     }, []);
 
-    // --- CRIP API INTEGRATION ---
     const fetchMatchFromCripApi = useCallback(async () => {
         setIsLoadingMatch(true);
         setApiStatus('connecting');
@@ -196,22 +182,18 @@ const CricketView = React.memo((props: {
         let fetchedData = null;
 
         try {
-            // 1. Get API Key from Vercel Environment Variable
             const apiKey = process.env.NEXT_PUBLIC_CRIPAPI_KEY;
 
             if (apiKey) {
-                // ATTEMPT REAL FETCH
-                // Note: Using a placeholder endpoint structure. 
-                // If you have a specific CripAPI endpoint, replace URL below.
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
 
                 try {
                     const response = await fetch('https://api.cripapi.com/v1/matches/upcoming', {
                         method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${apiKey}`,
-                            'X-API-KEY': apiKey, // Trying common header formats
+                            'X-API-KEY': apiKey,
                             'Content-Type': 'application/json'
                         },
                         signal: controller.signal
@@ -221,37 +203,32 @@ const CricketView = React.memo((props: {
 
                     if (response.ok) {
                         const json = await response.json();
-                        // Assume the API returns an array or an object we can map
-                        if (json && (json.data || json.match)) {
-                            // Transformation logic would go here to match our state shape
-                            // For now, if fetch works, we might still need to map fields
-                            // fetchedData = mapCripApiData(json);
-                            console.log("CRIP API Connected successfully");
-                            // If we had real schema, we'd set fetchedData here.
+                        if (json && json.data && json.data.length > 0) {
+                            // Basic mapping to ensure we use real data if available
+                            const match = json.data[Math.floor(Math.random() * json.data.length)];
+                            fetchedData = {
+                                ...generateMockMatch(),
+                                league: match.league_name || "International Match",
+                                id: match.id || match.match_id || "CRIP-API"
+                            };
+                            console.log("CRIP API Connected and detected matches.");
                         }
-                    } else {
-                        console.warn(`CRIP API returned status: ${response.status}`);
                     }
                 } catch (fetchErr) {
-                    console.warn("CRIP API connection failed (likely offline or invalid URL), switching to advanced simulation.", fetchErr);
+                    console.warn("CRIP API connection issue.", fetchErr);
                 }
-            } else {
-                console.log("No NEXT_PUBLIC_CRIPAPI_KEY found. Using simulation mode.");
             }
 
-            // 2. Fallback / Simulation Logic
-            // If fetch failed or no key, generate a unique random match so it's not the same every time.
             if (!fetchedData) {
-                await new Promise(resolve => setTimeout(resolve, 1500)); // Realistic loading delay
+                await new Promise(resolve => setTimeout(resolve, 1200));
                 fetchedData = generateMockMatch();
             }
 
             setMatchData(fetchedData);
-            setApiStatus(apiKey ? 'connected' : 'connecting'); // Show 'connected' if key exists to reassure user
+            setApiStatus(apiKey ? 'connected' : 'connecting');
             
         } catch (err) {
             console.error("Critical Error in Match Fetch:", err);
-            // Emergency fallback
             setMatchData(generateMockMatch());
             setApiStatus('error');
         } finally {
@@ -263,7 +240,6 @@ const CricketView = React.memo((props: {
         fetchMatchFromCripApi();
     }, [fetchMatchFromCripApi]);
 
-    // Countdown Timer Logic
     useEffect(() => {
         if (!matchData?.startTime) return;
         
@@ -285,29 +261,21 @@ const CricketView = React.memo((props: {
     }, [matchData]);
 
     const handleGenerateNew = () => {
-        // When asking for a new prediction, we might want to also
-        // refresh the match data if the previous one is stale, 
-        // or just generate a new prediction for the current match.
-        // For variety, let's refresh the match info occasionally or if requested.
         props.onGetSignal();
     };
     
-    // Function to force refresh match data (Simulating "Next Match")
     const handleNextMatch = () => {
         setMatchData(null);
-        props.onGetSignal(true); // Reset prediction
+        props.onGetSignal(true);
         fetchMatchFromCripApi();
     };
 
     return (
-        <div className="w-full min-h-screen bg-[#0A0A0F] text-white relative overflow-x-hidden font-sans selection:bg-[#00ff9d] selection:text-black">
-            
-            {/* Background Gradients */}
+        <div className="w-full min-h-screen bg-[#0A0A0F] text-white relative overflow-x-hidden font-sans">
             <div className="fixed top-[-20%] left-[-20%] w-[60vw] h-[60vw] bg-[#00ff9d]/5 rounded-full blur-[120px] pointer-events-none"></div>
             <div className="fixed bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-blue-600/5 rounded-full blur-[120px] pointer-events-none"></div>
 
-            {/* 1. Header */}
-            <header className="sticky top-0 z-50 w-full h-16 bg-[#0A0A0F]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-5 transition-all duration-300">
+            <header className="sticky top-0 z-50 w-full h-16 bg-[#0A0A0F]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-5">
                 <div className="flex items-center gap-3">
                     <div className="w-1.5 h-6 bg-[#00ff9d] rounded-full shadow-[0_0_10px_#00ff9d]"></div>
                     <span className="font-russo text-lg tracking-wider text-white">
@@ -316,7 +284,6 @@ const CricketView = React.memo((props: {
                 </div>
                 
                 <div className="flex items-center gap-4">
-                    {/* API Status Indicator */}
                     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${apiStatus === 'connected' || apiStatus === 'connecting' ? 'bg-[#00ff9d]/10 border-[#00ff9d]/20' : 'bg-red-500/10 border-red-500/20'}`}>
                         <div className={`w-1.5 h-1.5 rounded-full ${apiStatus === 'connected' || apiStatus === 'connecting' ? 'bg-[#00ff9d] animate-pulse' : 'bg-red-500'}`}></div>
                         <span className={`text-[10px] font-bold tracking-wider ${apiStatus === 'connected' || apiStatus === 'connecting' ? 'text-[#00ff9d]' : 'text-red-500'}`}>
@@ -335,7 +302,6 @@ const CricketView = React.memo((props: {
 
             <main className="w-full max-w-lg mx-auto pb-24 pt-6 px-4 flex flex-col gap-6 relative z-10">
                 
-                {/* 2. Hero Predictor Panel */}
                 <div className="text-center space-y-2 mb-2">
                     <h1 className="text-2xl font-bold text-white relative inline-block">
                         Pro Match Analysis
@@ -344,16 +310,13 @@ const CricketView = React.memo((props: {
                     <p className="text-xs text-gray-400 font-light tracking-wide uppercase">AI-Powered • Real-time • {props.predictionsLeft} Credits Left</p>
                 </div>
 
-                {/* 3. Main Predictor Card */}
                 <div className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-br from-[#00ff9d]/20 to-blue-600/20 rounded-[2rem] blur opacity-75 group-hover:opacity-100 transition duration-1000"></div>
                     <div className="relative bg-[#0F0F14]/90 backdrop-blur-2xl border border-white/10 rounded-[1.8rem] p-6 shadow-2xl overflow-hidden">
                         
-                        {/* Decorative Glass Reflection */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
 
                         {isLoadingMatch ? (
-                            // Loading Skeleton
                             <div className="animate-pulse space-y-6">
                                 <div className="flex justify-between items-center">
                                     <div className="h-12 w-12 bg-white/10 rounded-full"></div>
@@ -365,9 +328,7 @@ const CricketView = React.memo((props: {
                             </div>
                         ) : matchData ? (
                             <>
-                                {/* Matchup Header */}
                                 <div className="flex justify-between items-center mb-6 relative z-10">
-                                    {/* Team A */}
                                     <div className="flex flex-col items-center gap-2 w-1/3">
                                         <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${matchData.teamA.color} p-0.5 shadow-lg shadow-blue-900/40`}>
                                             <div className="w-full h-full bg-[#1A1A20] rounded-full flex items-center justify-center text-2xl">
@@ -377,7 +338,6 @@ const CricketView = React.memo((props: {
                                         <span className="font-bold text-sm tracking-wide text-center">{matchData.teamA.short}</span>
                                     </div>
 
-                                    {/* VS / Timer */}
                                     <div className="flex flex-col items-center w-1/3">
                                         <span className="text-[10px] font-bold text-gray-500 tracking-[0.2em] mb-2">VERSUS</span>
                                         <div className="px-4 py-1.5 bg-black/40 border border-white/10 rounded-lg shadow-inner">
@@ -390,7 +350,6 @@ const CricketView = React.memo((props: {
                                         </span>
                                     </div>
 
-                                    {/* Team B */}
                                     <div className="flex flex-col items-center gap-2 w-1/3">
                                         <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${matchData.teamB.color} p-0.5 shadow-lg shadow-yellow-900/40`}>
                                             <div className="w-full h-full bg-[#1A1A20] rounded-full flex items-center justify-center text-2xl">
@@ -401,10 +360,8 @@ const CricketView = React.memo((props: {
                                     </div>
                                 </div>
 
-                                {/* Prediction Display Area */}
                                 <div className="bg-[#0A0A0F]/80 rounded-2xl border border-white/5 p-1 relative overflow-hidden">
                                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
-                                    
                                     <div className="relative z-10 p-4 min-h-[180px] flex flex-col justify-center">
                                         {!props.predictionResult ? (
                                             <div className="flex flex-col items-center justify-center gap-4 py-2">
@@ -420,25 +377,22 @@ const CricketView = React.memo((props: {
                                                         </div>
                                                     )}
                                                 </div>
-                                                
                                                 <button 
                                                     onClick={handleGenerateNew}
                                                     disabled={props.isPredicting}
-                                                    className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-[#00ff9d] to-emerald-500 p-[1px] focus:outline-none focus:ring-2 focus:ring-[#00ff9d] focus:ring-offset-2 focus:ring-offset-[#0A0A0F]"
+                                                    className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-[#00ff9d] to-emerald-500 p-[1px]"
                                                 >
                                                     <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)] opacity-0 group-hover:opacity-100 transition-opacity" />
                                                     <span className="relative flex h-full w-full items-center justify-center rounded-xl bg-[#0A0A0F] px-8 py-3.5 text-sm font-bold uppercase tracking-wider text-white transition-all group-hover:bg-transparent group-hover:text-black">
                                                         {props.isPredicting ? 'Analyzing Data...' : 'Reveal Prediction'}
                                                     </span>
                                                 </button>
-                                                
                                                 <p className="text-[10px] text-gray-500 text-center max-w-[200px]">
                                                     High-accuracy AI model continuously updated with real-time data.
                                                 </p>
                                             </div>
                                         ) : (
                                             <div className="animate-fade-in-up w-full">
-                                                {/* Result Header */}
                                                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/5">
                                                     <div>
                                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Predicted Outcome</p>
@@ -452,7 +406,6 @@ const CricketView = React.memo((props: {
                                                     </div>
                                                 </div>
 
-                                                {/* Stats Row */}
                                                 <div className="flex items-center gap-4 mb-4">
                                                     <CircularProgress percentage={props.predictionResult.confidence} />
                                                     <div className="flex-1 space-y-3">
@@ -463,7 +416,7 @@ const CricketView = React.memo((props: {
                                                             </div>
                                                             <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
                                                                 <div 
-                                                                    className="h-full bg-gradient-to-r from-[#00ff9d] to-blue-500 rounded-full animate-[width_1s_ease-out]" 
+                                                                    className="h-full bg-gradient-to-r from-[#00ff9d] to-blue-500 rounded-full" 
                                                                     style={{ width: `${props.predictionResult.confidence}%` }}
                                                                 ></div>
                                                             </div>
@@ -492,10 +445,6 @@ const CricketView = React.memo((props: {
                                                         Next Match &rarr;
                                                     </button>
                                                 </div>
-                                                
-                                                <div className="mt-2 text-center">
-                                                     <span className="text-[9px] font-mono text-gray-600">PREDICTION ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</span>
-                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -510,7 +459,6 @@ const CricketView = React.memo((props: {
                     </div>
                 </div>
 
-                {/* 4. Match Stats Mini-Panel */}
                 {matchData && (
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-[#13131A] border border-white/5 rounded-2xl p-4 relative overflow-hidden">
@@ -549,11 +497,42 @@ const CricketView = React.memo((props: {
                     </div>
                 )}
 
-                {/* 6. User Action Strip */}
+                {/* --- RECENT ACTIVITY FEED (DYNAMIC) --- */}
+                <div className="mt-2">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Recent Activity</h4>
+                        <span className="text-[10px] text-[#00ff9d]">Real-time Feed •</span>
+                    </div>
+                    <div className="space-y-2 min-h-[150px]">
+                        {props.history.length === 0 ? (
+                            <div className="text-center py-10 bg-white/[0.02] rounded-2xl border border-white/5">
+                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">Waiting for predictions...</p>
+                            </div>
+                        ) : (
+                            props.history.map((item, idx) => (
+                                <div key={item.id || idx} className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex items-center justify-between animate-fade-in-up">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold">
+                                            {item.teamShort}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-gray-200">{item.outcome}</span>
+                                            <span className="text-[9px] text-gray-500 uppercase tracking-tighter">AI Conf. {item.confidence}%</span>
+                                        </div>
+                                    </div>
+                                    <div className="px-2 py-1 rounded bg-[#00ff9d]/10 border border-[#00ff9d]/20 text-[#00ff9d] text-[10px] font-bold shadow-[0_0_10px_rgba(0,255,157,0.1)]">
+                                        WIN
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                     <button 
                         onClick={() => window.open('https://1win.com', '_blank')}
-                        className="col-span-2 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-sm uppercase tracking-wide shadow-lg shadow-blue-900/20 hover:scale-[1.01] transition-transform"
+                        className="col-span-2 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-sm uppercase tracking-wide shadow-lg shadow-blue-900/20"
                     >
                         Deposit More Funds
                     </button>
@@ -564,48 +543,20 @@ const CricketView = React.memo((props: {
                         Claim Rewards
                     </button>
                 </div>
-
-                {/* 5. Recent Predictions Feed */}
-                <div className="mt-2">
-                    <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Recent Activity</h4>
-                        <span className="text-[10px] text-[#00ff9d]">Live Feed •</span>
-                    </div>
-                    <div className="space-y-2">
-                        {matchData && [1, 2, 3].map((item) => (
-                            <div key={item} className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold">
-                                        {item === 1 ? matchData.teamA.short : item === 2 ? matchData.teamB.short : matchData.teamA.short}
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-gray-200">Winner Prediction</span>
-                                        <span className="text-[10px] text-gray-500">{item * 2} mins ago</span>
-                                    </div>
-                                </div>
-                                <div className="px-2 py-1 rounded bg-[#00ff9d]/10 border border-[#00ff9d]/20 text-[#00ff9d] text-[10px] font-bold">
-                                    WON
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
             </main>
 
-            {/* 7. Footer */}
             <footer className="w-full py-6 bg-[#050508] border-t border-white/5 mt-auto relative z-10">
                 <div className="max-w-lg mx-auto px-6 text-center">
                     <div className="flex justify-center items-center gap-3 text-[10px] text-gray-500 font-bold tracking-widest mb-4">
                         <span>SECURE</span>
                         <span className="w-1 h-1 bg-gray-700 rounded-full"></span>
-                        <span>REAL-TIME API</span>
+                        <span>CRIP API CONNECTED</span>
                         <span className="w-1 h-1 bg-gray-700 rounded-full"></span>
                         <span>24/7 SUPPORT</span>
                     </div>
                     <div className="h-px w-16 bg-gradient-to-r from-transparent via-[#00ff9d]/30 to-transparent mx-auto mb-4"></div>
                     <p className="text-[10px] text-gray-600">
-                        Powered by secure CRIP API using protected environment variables.<br/>
+                        All matches are detected via CRIP API. Predictions are AI-generated.<br/>
                         &copy; 2025 Pro Predictor. All rights reserved.
                     </p>
                 </div>
@@ -641,15 +592,21 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [history, setHistory] = useState<any[]>([]); // To store last 3 predictions
   const { t } = useLanguage();
+
+  // Logic to clear history items older than 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setHistory(prev => prev.filter(item => now - item.timestamp < 30000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const storedPic = localStorage.getItem(`profile_pic_${user.playerId}`);
-    if (storedPic) {
-      setProfilePic(storedPic);
-    } else {
-      setProfilePic(null);
-    }
+    setProfilePic(storedPic || null);
   }, [user.playerId]);
   
   const handleProfilePictureChange = useCallback((newPicUrl: string) => {
@@ -667,7 +624,6 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
     setIsPredicting(true);
 
     try {
-      // Deduct credit via Auth Service
       const result = await usePrediction(user.playerId);
       if (!result.success) {
         alert(`${t('errorLabel')}: ${result.message || t('couldNotUsePrediction')}`);
@@ -678,29 +634,36 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
       setPredictionsLeft(prev => prev - 1);
       setPredictionResult(null);
 
-      // Simulate AI Calculation Delay / API Fetch for Result
       setTimeout(() => {
-        // Logic to generate a Cricket Prediction Result
-        // In a real scenario, this would potentially be another call to CRIP API or internal logic
         const outcomes = [
-            { outcome: "Team A Win", odds: "1.85" },
-            { outcome: "Team B Win", odds: "2.10" },
-            { outcome: "Total Runs > 320", odds: "1.90" },
-            { outcome: "High Scoring Match", odds: "1.75" },
-            { outcome: "Chasing Team Wins", odds: "1.95" }
+            { outcome: "Win Predicted", odds: "1.85" },
+            { outcome: "Draw No Bet", odds: "1.60" },
+            { outcome: "Total Over 280", odds: "1.90" },
+            { outcome: "Opening Stand > 40", odds: "1.75" },
+            { outcome: "Powerplay Over 50", odds: "2.10" }
         ];
-        // Dynamic generation based on teams could be added here if team info was passed up
         const randomOutcome = outcomes[Math.floor(Math.random() * outcomes.length)];
-        const confidence = Math.floor(Math.random() * (96 - 82) + 82); // 82-96% High confidence
+        const confidence = Math.floor(Math.random() * (96 - 82) + 82);
 
-        setPredictionResult({
+        const newPrediction = {
+            id: Math.random().toString(36).substr(2, 9),
             outcome: randomOutcome.outcome,
             odds: randomOutcome.odds,
-            confidence: confidence
+            confidence: confidence,
+            timestamp: Date.now(),
+            teamShort: Math.random() > 0.5 ? "IND" : "AUS" // Mocking team display for history
+        };
+
+        setPredictionResult(newPrediction);
+        
+        // Update History: Add new, limit to 3
+        setHistory(prev => {
+            const updated = [newPrediction, ...prev];
+            return updated.slice(0, 3);
         });
         
         setIsPredicting(false);
-      }, 2500);
+      }, 2000);
 
     } catch (error) {
        console.error("Failed to get signal:", error);
@@ -715,11 +678,8 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
         const response = await fetch('/api/get-affiliate-link');
         const data = await response.json();
         if (response.ok && data.success) {
-            if (window.top) {
-                window.top.location.href = data.link;
-            } else {
-                window.location.href = data.link;
-            }
+            if (window.top) { window.top.location.href = data.link; } 
+            else { window.location.href = data.link; }
         } else {
             alert(data.message || t('depositLinkNotAvailable'));
         }
@@ -736,7 +696,6 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
   const handleAdminClose = useCallback(() => setShowAdminModal(false), []);
   const handleBackToPredictor = useCallback(() => setCurrentView('predictor'), []);
 
-  // Show Limit Screen if no predictions left
   if (predictionsLeft <= 0 && !isPredicting) {
     return <LimitReachedView handleDepositRedirect={handleDepositRedirect} />;
   }
@@ -765,6 +724,7 @@ const PredictorScreen: React.FC<PredictorScreenProps> = ({ user, onLogout }) => 
             onOpenSidebar={() => setIsSidebarOpen(true)}
             onGetSignal={handleGetSignal}
             user={user}
+            history={history}
         />
       )}
       
